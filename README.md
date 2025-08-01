@@ -83,5 +83,5 @@ Ce projet est mis à disposition sous licence MIT. Vous pouvez l'utiliser librem
 **Kiyali Coulibaly**
 Data Scientist • Économiste de la santé
 📧 [fas.coul@yahoo.fr](mailto:fas.coul@yahoo.fr)
-🌍 [LinkedIn](https://www.linkedin.com/) (à compléter)
+🌍 [LinkedIn](https://www.linkedin.com/in/kiyali-coulibaly)
 
