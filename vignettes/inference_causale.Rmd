@@ -1,0 +1,1011 @@
+---
+title: "Inférence Causale : Impact de l'Activité Physique sur la Santé"
+subtitle: "Variables de contrôle, confondeurs et biais de surcontrôle"
+theme_general: "Identifier les effets causaux à partir de données observationnelles : biais de sélection sur les observables"
+author: "Kiyali Coulibaly \n\\textit{Économiste de la santé | Data Scientist} \nfas.coul@yahoo.fr \nlinkedin.com/in/kiyali-coulibaly \ngithub.com/Faskos92"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+    latex_engine: xelatex
+    keep_tex: true
+    md_extensions: +hard_line_breaks
+    toc: true
+    toc_depth: 3
+    number_sections: true
+    fig_caption: true
+header-includes:
+  - \usepackage{placeins}
+  - \usepackage{booktabs}
+  - \usepackage{longtable}
+  - \usepackage{geometry}
+  - \geometry{a4paper, margin=1in}
+  - \usepackage{caption}
+  - \captionsetup[table]{labelformat=empty, justification=raggedright, singlelinecheck=off}
+  - \captionsetup[figure]{labelformat=empty, justification=raggedright, singlelinecheck=off}
+  - \renewcommand{\figurename}{\textbf{Figure}}
+  - \renewcommand{\tablename}{\textbf{Tableau}}
+  - \usepackage[font=small,labelfont=bf]{caption}
+  - \usepackage{float}
+---
+
+```{=latex}
+\listoffigures
+\listoftables
+```
+\FloatBarrier
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE, 
+  warning = FALSE, 
+  message = FALSE, 
+  fig.width = 8, 
+  fig.height = 5, 
+  fig.align = 'center',
+  fig.pos = 'H',  # Force le placement des figures
+  out.extra = '', 
+
+  dev = 'pdf',
+  dpi = 300
+)
+
+```
+
+```{r lib, include=FALSE}
+# Définir le répertoire de travail(le mien)
+setwd("C:/Users/nosty/Desktop/INFERENCE CAUSALE")
+
+# Charger la fonction de simulation (dans le meme dossier de job que le setwd)
+source("donnees_controles.R")
+
+# Chargement des packages
+library(ggplot2)
+library(dplyr)
+library(stargazer)
+library(gridExtra)
+library(ggthemes)
+library(corrplot)
+library(knitr)
+library(broom)
+library(ggdag)
+library(AER)
+library(gtsummary)
+library(kableExtra)
+library(tidyr)
+library(mediation)
+library(modelsummary)
+library(tibble)
+library(kableExtra)
+```
+
+\FloatBarrier
+
+# Introduction
+
+## Contexte et enjeux
+
+En santé publique, l'établissement de relations causales entre les comportements de santé (comme l'activité physique) et les résultats sanitaires représente un défi méthodologique majeur. Les données observationnelles, contrairement aux essais contrôlés randomisés, sont susceptibles de contenir plusieurs sources de biais qui peuvent fausser les conclusions :
+
+- **Biais de confusion** : Variables qui influencent simultanément l'exposition et le résultat
+- **Biais de médiation** : Contrôle inapproprié de variables intermédiaires
+- **Biais de surcontrôle** : Inclusion de variables post-traitement ou de collideurs
+
+Ce document présente une approche méthodologique rigoureuse pour identifier l'effet causal de l'activité physique sur la santé auto-déclarée à partir de données simulées.
+
+## Objectifs de l'étude
+
+L'objectif principal est de démontrer l'importance cruciale d'un choix rigoureux des variables de contrôle dans les modèles statistiques pour obtenir des estimations causales fiables. Plus spécifiquement, nous cherchons à :
+
+1. **Illustrer les différents types de biais** causés par un mauvais choix de variables de contrôle
+2. **Comparer les estimations** obtenues avec différentes spécifications de modèles
+3. **Proposer une méthode robuste** pour l'identification causale en données observationnelles
+
+**Question de recherche centrale** : Quel est l'effet causal de l'activité physique sur le score de santé auto-déclarée ?
+
+
+# Cadre théorique : Hypothèse d'identification causale
+
+Notre approche repose sur l'**hypothèse d'ignorabilité conditionnelle** (Rubin, 1974; Rosenbaum & Rubin, 1983) :
+
+$$Y(x) \perp X \mid C$$
+
+où :
+- $Y(x)$ représente le résultat potentiel pour un niveau d'exposition $x$
+- $X$ est le niveau d'activité physique (variable continue)
+- $C$ est l'ensemble des variables de contrôle
+
+Cette hypothèse stipule que, conditionnellement aux variables de contrôle $C$, l'exposition $X$ est indépendante des résultats potentiels $Y(x)$. Bien que forte et non directement testable, elle permet d'interpréter les coefficients estimés comme des effets causaux.
+
+## Conditions d'identification
+
+Pour une identification causale robuste, plusieurs conditions doivent être satisfaites :
+
+1. **Absence de confondeurs non mesurés** : Toutes les causes communes de $X$ et $Y$ sont incluses dans $C$
+2. **Spécification fonctionnelle correcte** : Le modèle capture les non-linéarités et interactions pertinentes
+3. **Validité de la structure causale** : Le diagramme causal (DAG) représente fidèlement la réalité
+4. **Absence de causalité inverse** : Le score de santé n'influence pas rétroactivement l'activité physique
+
+> **Note méthodologique** : Ces hypothèses doivent être évaluées dans chaque contexte spécifique pour garantir la validité des inférences causales.
+
+
+
+# Cadre conceptuel : Diagrammes causaux (DAGs)
+
+Les **Diagrammes Acycliques Dirigés (DAGs)** constituent un outil fondamental pour visualiser les relations causales et guider le choix des variables de contrôle. Chaque DAG illustre une configuration causale spécifique pour l'estimation de l'effet de l'activité physique ($X$) sur le score de santé ($Y$).
+
+## Relations causales fondamentales
+### Configuration 1 : Confusion simple
+
+```{r dag-confusion, fig.cap="Figure 1: Structure causale avec confondeur simple"}
+dag_confounder <- dagify(
+  X ~ C,
+  Y ~ X + C,
+  labels = c(X = "Activité\nPhysique (X)", Y = "Score de\nSanté (Y)", C = "Confondeur\n(C)")
+)
+
+p1 <- ggdag(dag_confounder, text = FALSE, layout = "circle") + 
+  theme_dag_blank() +
+  geom_dag_point(shape = 21, fill = "lightblue", color = "navy", size = 12) +
+  geom_dag_text(size = 4, colour = "navy", fontface = "bold") +
+  geom_dag_edges(color = "darkblue", alpha = 0.8, width = 1.5) +
+  labs(
+    title = "Configuration 1 : Confusion (C → X, C → Y)",
+    subtitle = "Le confondeur influence simultanément l'exposition et le résultat"
+  ) +
+  theme(
+    plot.title = element_text(face = "bold", size = 14, hjust = 0.5),
+    plot.subtitle = element_text(size = 12, hjust = 0.5, color = "gray40")
+  )
+
+print(p1)
+```
+
+**Interprétation** : Dans cette configuration, le confondeur $C$ (ex: âge, statut socio-économique) influence à la fois le niveau d'activité physique et le score de santé. Sans contrôle de $C$, l'association observée entre $X$ et $Y$ sera biaisée car elle inclut le chemin non-causal $X \leftarrow C \rightarrow Y$.
+
+**Stratégie d'identification** : Contrôler $C$ bloque le chemin de confusion et permet d'isoler l'effet causal direct $X \rightarrow Y$.
+
+
+### Configuration 2 : Médiation
+
+```{r dag-mediation, fig.cap="Figure 2: Structure causale avec médiateur"}
+dag_mediator <- dagify(
+  M ~ X,
+  Y ~ X + M,
+  labels = c(X = "Activité\nPhysique (X)", Y = "Score de\nSanté (Y)", M = "IMC\n(Médiateur)")
+)
+
+p2 <- ggdag(dag_mediator, text = FALSE, layout = "circle") + 
+  theme_dag_blank() +
+  geom_dag_point(shape = 21, fill = "lightgreen", color = "darkgreen", size = 12) +
+  geom_dag_text(size = 4, colour = "darkgreen", fontface = "bold") +
+  geom_dag_edges(edge_colour = "darkgreen", edge_alpha = 0.8, edge_width = 1.5) +
+  labs(
+    title = "Configuration 2 : Médiation (X → M → Y)",
+    subtitle = "L'IMC transmet partiellement l'effet de l'activité physique"
+  ) +
+  theme(
+    plot.title = element_text(face = "bold", size = 14, hjust = 0.5),
+    plot.subtitle = element_text(size = 12, hjust = 0.5, color = "gray40")
+  )
+
+print(p2)
+```
+**Interprétation** : L'activité physique ($X$) influence l'IMC ($M$), qui à son tour affecte le score de santé ($Y$). L'IMC est donc un **médiateur** qui transmet une partie de l'effet causal.
+
+**Implications pour l'estimation** :
+- **Effet total** : $X \rightarrow Y$ (direct) + $X \rightarrow M \rightarrow Y$ (indirect)
+- **Effet direct** : $X \rightarrow Y$ (en contrôlant $M$)
+- **Erreur courante** : Contrôler $M$ pour estimer l'effet total sous-estime l'effet réel
+
+### Configuration 3 : Surcontrôle
+
+```{r dag-surcontrol, fig.cap="Figure 3: Structure causale avec variable de surcontrôle"}
+dag_surcontrol <- dagify(
+  S ~ X,
+  Y ~ X + S,
+  labels = c(X = "Activité\nPhysique (X)", Y = "Score de\nSanté (Y)", S = "Motivation\nSanté (S)")
+)
+
+p3 <- ggdag(dag_surcontrol, text = FALSE, layout = "circle") + 
+  theme_dag_blank() +
+  geom_dag_point(shape = 21, fill = "salmon", color = "darkred", size = 12) +
+  geom_dag_text(size = 4, colour = "darkred", fontface = "bold") +
+  geom_dag_edges(edge_colour = "darkred", edge_alpha = 0.8, edge_width = 1.5) +
+  labs(
+    title = "Configuration 3 : Surcontrôle (X → S → Y)",
+    subtitle = "La motivation est une conséquence de l'activité physique"
+  ) +
+  theme(
+    plot.title = element_text(face = "bold", size = 14, hjust = 0.5),
+    plot.subtitle = element_text(size = 12, hjust = 0.5, color = "gray40")
+  )
+
+print(p3)
+```
+
+**Interprétation** : La motivation santé ($S$) est influencée par l'activité physique ($X$) et affecte le score de santé ($Y$). $S$ est une **variable post-traitement**.
+
+**Problème du surcontrôle** : Contrôler $S$ bloque le chemin causal $X \rightarrow S \rightarrow Y$, conduisant à une sous-estimation de l'effet total de $X$ sur $Y$.
+
+### Modèle intégré : Configurations multiples
+
+```{r dag-complet, fig.cap="Figure 4: Structure causale complète"}
+dag_full <- dagify(
+  X ~ C,
+  M ~ X,
+  S ~ X,
+  Y ~ X + M + S + C,
+  labels = c(X = "Activité\nPhysique (X)", Y = "Score de\nSanté (Y)", C = "Confondeur\n(C)", 
+            M = "IMC\n(Médiateur)", S = "Motivation\nSanté (S)")
+)
+
+p4 <- ggdag(dag_full, text = FALSE, layout = "nicely") + 
+  theme_dag_blank() +
+  geom_dag_point(shape = 21, fill = "lightgray", color = "black", size = 10) +
+  geom_dag_text(size = 3.5, colour = "black", fontface = "bold") +
+  geom_dag_edges(edge_colour = "gray20", edge_alpha = 0.8, edge_width = 1.3) +
+  labs(
+    title = "Modèle Intégré : Confusion + Médiation + Surcontrôle",
+    subtitle = "Structure causale complète avec tous les mécanismes"
+  ) +
+  theme(
+    plot.title = element_text(face = "bold", size = 14, hjust = 0.5),
+    plot.subtitle = element_text(size = 12, hjust = 0.5, color = "gray40")
+  )
+
+print(p4)
+```
+
+**Synthèse des mécanismes** : Ce modèle intégré combine :
+- **Confusion** via $C$
+- **Médiation** via $M$ (IMC)
+- **Surcontrôle** via $S$ (motivation)
+
+**Stratégie d'identification optimale** : Pour estimer l'effet causal total de $X$ sur $Y$, seuls les confondeurs ($C$) doivent être contrôlés. Les médiateurs ($M$) et variables post-traitement ($S$) ne doivent pas être inclus.
+
+\FloatBarrier
+
+# Données et méthodologie
+
+## Présentation des données simulées
+
+Les données utilisées proviennent d'une simulation réaliste conçue pour reproduire les caractéristiques d'une enquête de santé populationnelle. Cette approche permet de connaître la "vérité terrain" et d'évaluer la performance des différentes méthodes d'estimation.
+
+```{r data-loading}
+set.seed(123)
+health_data <- donnees_activite_sante()
+
+cat("\nVariables de la base de données : \n")
+print(colnames(health_data))
+
+cat("\nStructure des données : \n")
+glimpse(health_data)
+```
+
+
+## Analyse descriptive
+
+### Statistiques univariées
+
+```{r statistiques-descriptives, results='asis'}
+table_desc <- health_data %>%
+  tbl_summary(
+    statistic = list(
+      all_continuous() ~ "{mean} ± {sd} [{min} ; {max}]",
+      all_categorical() ~ "{n} ({p}%)"
+    ),
+    digits = list(all_continuous() ~ 2, all_categorical() ~ 1),
+    missing = "no",
+    sort = list(all_categorical() ~ "frequency")
+  ) %>%
+  modify_caption("Tableau 1: Statistiques descriptives univariées (N = {N})") %>%
+  bold_labels() %>%
+  italicize_levels()
+
+table_desc %>%
+  as_kable_extra(
+    booktabs = TRUE,
+    longtable = TRUE,
+    label = "tab:desc"
+  ) %>%
+  kable_styling(
+    latex_options = c("striped", "HOLD_position", "repeat_header"),
+    font_size = 10
+  ) %>%
+  column_spec(1, bold = TRUE, width = "4cm") %>%
+  column_spec(2, width = "10cm")
+```
+
+**Observations** :
+- L'échantillon comprend `r nrow(health_data)` individus avec un âge moyen de `r round(mean(health_data$Age), 1)` ans
+- Le score de santé moyen est de `r round(mean(health_data$ScoreSante), 1)` points (écart-type : `r round(sd(health_data$ScoreSante), 1)`)
+- Le niveau d'activité physique moyen est de `r round(mean(health_data$ActivitePhysique), 1)` sur une échelle de 0 à 10
+
+### Analyse des relations bivariées
+
+```{r exploration-bivariee-1, fig.cap="Figure 5: Relations principales entre variables explicatives et score de santé"}
+# Graphiques des relations principales
+g1 <- ggplot(health_data, aes(x = ActivitePhysique, y = ScoreSante)) +
+  geom_point(alpha = 0.6, color = "steelblue", size = 1.5) +
+  geom_smooth(method = "lm", se = TRUE, color = "red", linewidth = 1.2) +
+  geom_smooth(method = "loess", se = FALSE, color = "orange", linewidth = 1, linetype = "dashed") +
+  theme_minimal() +
+  labs(title = "A. Activité physique et santé", x = "Activité Physique (0-10)", y = "Score de Santé (0-100)") +
+  theme(plot.title = element_text(face = "bold", size = 12), axis.title = element_text(face = "bold", size = 10))
+
+g2 <- ggplot(health_data, aes(x = Age, y = ScoreSante)) +
+  geom_point(alpha = 0.4, color = "darkgreen", size = 1.5) +
+  geom_smooth(method = "loess", se = TRUE, color = "orange", linewidth = 1.2) +
+  theme_minimal() +
+  labs(title = "B. Âge et santé", x = "Âge (années)", y = "Score de Santé (0-100)") +
+  theme(plot.title = element_text(face = "bold", size = 12), axis.title = element_text(face = "bold", size = 10))
+
+g3 <- ggplot(health_data, aes(x = Sexe, y = ScoreSante, fill = Sexe)) +
+  geom_boxplot(alpha = 0.7, outlier.alpha = 0.5) +
+  scale_fill_manual(values = c("Femme" = "#FF6B6B", "Homme" = "#4ECDC4")) +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  labs(title = "C. Score de santé par sexe", x = "Sexe", y = "Score de Santé (0-100)") +
+  theme(plot.title = element_text(face = "bold", size = 12), axis.title = element_text(face = "bold", size = 10))
+
+g4 <- ggplot(health_data, aes(x = Tabagisme, y = ScoreSante, fill = Tabagisme)) +
+  geom_boxplot(alpha = 0.7, outlier.alpha = 0.5) +
+  scale_fill_manual(values = c("Non-fumeur" = "#2ECC71", "Fumeur" = "#E74C3C")) +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  labs(title = "D. Score de santé et tabagisme", x = "Statut tabagique", y = "Score de Santé (0-100)") +
+  theme(plot.title = element_text(face = "bold", size = 12), axis.title = element_text(face = "bold", size = 10))
+
+grid.arrange(g1, g2, g3, g4, nrow = 2, ncol = 2)
+```
+
+
+**Observations** :
+- **Relation positive** entre activité physique et score de santé (r = `r round(cor(health_data$ActivitePhysique, health_data$ScoreSante), 3)`)
+- **Effet non-linéaire de l'âge** : diminution du score de santé avec l'âge, plus marquée après 50 ans
+- **Différences par sexe** : les femmes présentent un score médian légèrement supérieur
+- **Impact du tabagisme** : écart moyen de `r round(mean(health_data$ScoreSante[health_data$Tabagisme == "Non-fumeur"]) - mean(health_data$ScoreSante[health_data$Tabagisme == "Fumeur"]), 1)` points entre non-fumeurs et fumeurs
+
+
+```{r exploration-bivariee-2, fig.cap="Figure 6: Relations secondaires et variables  potentiellement problématiques"}
+g5 <- ggplot(health_data, aes(x = IMC, y = ScoreSante)) +
+  geom_point(alpha = 0.5, color = "#8E44AD", size = 1.5) +
+  geom_smooth(method = "loess", se = TRUE, color = "#9B59B6", linewidth = 1.2) +
+  theme_minimal() +
+  labs(title = "E. IMC et santé (Médiateur potentiel)", x = "Indice de Masse Corporelle", y = "Score de Santé (0-100)") +
+  theme(plot.title = element_text(face = "bold", size = 12), axis.title = element_text(face = "bold", size = 10))
+
+g6 <- ggplot(health_data, aes(x = MotivationSante, y = ScoreSante)) +
+  geom_point(alpha = 0.5, color = "#E67E22", size = 1.5) +
+  geom_smooth(method = "loess", se = TRUE, color = "#D35400", linewidth = 1.2) +
+  theme_minimal() +
+  labs(title = "F. Motivation santé (Surcontrôle potentiel)", x = "Motivation Santé (0-10)", y = "Score de Santé (0-100)") +
+  theme(plot.title = element_text(face = "bold", size = 12), axis.title = element_text(face = "bold", size = 10))
+
+g7 <- ggplot(health_data, aes(x = Education, y = ScoreSante, fill = Education)) +
+  geom_boxplot(alpha = 0.7, outlier.alpha = 0.5) +
+  scale_fill_brewer(palette = "Set3") +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  labs(title = "G. Éducation et santé", x = "Niveau d'éducation", y = "Score de Santé (0-100)") +
+  theme(plot.title = element_text(face = "bold", size = 12), axis.title = element_text(face = "bold", size = 10))
+
+g8 <- ggplot(health_data, aes(x = RevenuFamilial, y = ScoreSante)) +
+  geom_point(alpha = 0.5, color = "#27AE60", size = 1.5) +
+  geom_smooth(method = "loess", se = TRUE, color = "#2ECC71", linewidth = 1.2) +
+  theme_minimal() +
+  labs(title = "H. Revenu familial et santé", x = "Revenu Familial (milliers €)", y = "Score de Santé (0-100)") +
+  theme(plot.title = element_text(face = "bold", size = 12), axis.title = element_text(face = "bold", size = 10))
+
+grid.arrange(g5, g6, g7, g8, nrow = 2, ncol = 2)
+```
+**Observations** :
+- IMC : relation négative non linéaire (médiateur potentiel).
+- Motivation santé : forte corrélation positive (risque de surcontrôle).
+- Éducation : gradient positif.
+- Revenu : association positive avec effet de plateau.
+
+
+### Analyse descriptive comparative et tests statistiques
+
+```{r summary-cat-vars, results='asis'}
+vars_cat <- names(dplyr::select(health_data, where(~ is.factor(.) | is.character(.))))
+list_tables <- list()
+
+for (var in vars_cat) {
+  stats_by_group <- health_data %>%
+    group_by(.data[[var]]) %>%
+    summarise(
+      Effectif = n(),
+      Moyenne = mean(ScoreSante, na.rm = TRUE),
+      SD = sd(ScoreSante, na.rm = TRUE),
+      .groups = 'drop'
+    ) %>%
+    mutate(Variable = var, Modalité = as.character(.data[[var]])) %>%
+    dplyr::select(Variable, Modalité, `Effectif (n)` = Effectif, `Score moyen` = Moyenne)
+  
+  n_groups <- nlevels(as.factor(health_data[[var]]))
+  p_value <- if (n_groups > 2) {
+    kruskal.test(as.formula(paste("ScoreSante ~", var)), data = health_data)$p.value
+  } else if (n_groups == 2) {
+    lvls <- levels(as.factor(health_data[[var]]))
+    group1 <- health_data %>% filter(.data[[var]] == lvls[1]) %>% pull(ScoreSante)
+    group2 <- health_data %>% filter(.data[[var]] == lvls[2]) %>% pull(ScoreSante)
+    wilcox.test(group1, group2)$p.value
+  } else {
+    NA
+  }
+  
+  stats_by_group$`p-value` <- ifelse(is.na(p_value), "", ifelse(p_value < 0.001, "<0.001", round(p_value, 3)))
+  list_tables[[var]] <- stats_by_group
+}
+
+table_all <- bind_rows(list_tables) %>%
+  group_by(Variable) %>%
+  mutate(Variable = ifelse(row_number() == 1, Variable, ""), `p-value` = ifelse(row_number() == 1, `p-value`, "")) %>%
+  ungroup()
+
+kable(table_all,
+      caption = "Tableau 2: Score moyen de santé par modalité des variables catégorielles",
+      digits = 2, booktabs = TRUE, align = "llccc", label = "tab:cat") %>%
+   kable_styling(latex_options = c("striped", "HOLD_position"))
+```
+
+Les effectifs et les scores moyens de santé ont été présentés selon les modalités des variables catégorielles étudiées. Les tests statistiques appropriés ont été appliqués pour évaluer les différences entre groupes : test de Mann-Whitney pour les variables à deux modalités et test de Kruskal-Wallis pour celles à plus de deux modalités.
+La dernière colonne du tableau présente les p-values issues des tests statistiques qui permettent d’évaluer la différence du score de santé entre les groupes.
+
+
+### Analyse des corrélations
+
+```{r matrice-correlations, fig.cap="Figure 7: Matrice de corrélation des variables numériques principales"}
+variables_numeriques <- dplyr::select(health_data, ScoreSante, ActivitePhysique, Age, IMC, MotivationSante, 
+                                     RevenuFamilial, StressPsychologique, SoutienSocial, QualiteSommeil)
+cor_matrix <- cor(variables_numeriques, use = "complete.obs")
+
+corrplot(cor_matrix, method = "color", type = "upper", order = "hclust",
+         addCoef.col = "black", number.cex = 0.8, tl.cex = 0.8, tl.col = "black", tl.srt = 45,
+         title = "Matrice de corrélation des variables numériques principales",
+         mar = c(0, 0, 2, 0), col = colorRampPalette(c("#E74C3C", "white", "#3498DB"))(200))
+```
+
+```{r correlations-cles, results='asis'}
+correlations_cles <- data.frame(
+  `Paire de variables` = c("Activité Physique ↔ Score Santé", "Activité Physique ↔ IMC", 
+                          "Activité Physique ↔ Motivation Santé", "Motivation Santé ↔ Score Santé",
+                          "IMC ↔ Score Santé", "Âge ↔ Score Santé"),
+  `Corrélation` = c(round(cor(health_data$ActivitePhysique, health_data$ScoreSante), 3),
+                    round(cor(health_data$ActivitePhysique, health_data$IMC), 3),
+                    round(cor(health_data$ActivitePhysique, health_data$MotivationSante), 3),
+                    round(cor(health_data$MotivationSante, health_data$ScoreSante), 3),
+                    round(cor(health_data$IMC, health_data$ScoreSante), 3),
+                    round(cor(health_data$Age, health_data$ScoreSante), 3))
+)
+
+kable(correlations_cles,
+      caption = "Tableau 3: Corrélations clés pour l'analyse causale",
+      booktabs = TRUE, align = c("l", "c", "l"), label = "tab:corr") %>%
+  kable_styling(latex_options = c("striped", "HOLD_position"), font_size = 10) %>%
+  column_spec(1, bold = TRUE, width = "4cm") %>%
+  column_spec(2, width = "2cm") 
+
+```
+
+**Implications** :
+- Corrélation activité physique-motivation santé (r = `r round(cor(health_data$ActivitePhysique, health_data$MotivationSante), 3)`).
+- Corrélation négative activité physique-IMC (r = `r round(cor(health_data$ActivitePhysique, health_data$IMC), 3)`).
+
+\FloatBarrier
+
+# Analyse multivariée : Comparaison des stratégies d'estimation
+
+## Stratégie d'analyse
+
+Nous comparons cinq modèles :
+1. **Naïf** : Sans contrôles (biaisé).
+2. **Contrôles légitimes** : Confondeurs seulement.
+3. **Surcontrôle** : Inclusion de la motivation santé (biaisé).
+4. **Médiation** : Contrôle de l'IMC (biaisé).
+5. **Complet** : Contrôles légitimes + interactions.
+
+## Modèle 1 : Régression Naïve (BIAISÉE)
+L'objectif est d'illustrer le biais de variables omises en estimant un modèle sans contrôles.
+
+```{r lm_simple_table, results='asis'}
+model1 <- lm(ScoreSante ~ ActivitePhysique, data = health_data)
+
+table_coef <- tidy(model1, conf.int = TRUE, conf.level = 0.95) %>%
+  mutate(term = ifelse(term == "(Intercept)", "Constante", "Activité physique"),
+         p_val = ifelse(p.value < 0.001, "<0.001", sprintf("%.3f", p.value))) %>%
+  dplyr::select(Termes = term, Estimate = estimate, `IC 95% inf` = conf.low, `IC 95% sup` = conf.high, `p-value` = p_val)
+
+extra_rows <- tibble(
+  Termes = c("Effectif (n)", "R²"),
+  Estimate = c(nobs(model1), round(summary(model1)$r.squared, 3)),
+  `IC 95% inf` = NA, `IC 95% sup` = NA, `p-value` = ""
+)
+
+final_table <- bind_rows(table_coef, extra_rows)
+
+kable(final_table, caption = "Tableau 4: Effet de l'activité physique (modèle naïf)",
+      digits = 3, booktabs = TRUE, align = "lcccc", label = "tab:naif") %>%
+  kable_styling(latex_options = c("striped", "HOLD_position"), font_size = 10) %>%
+  column_spec(1, bold = TRUE, width = "4cm") %>%
+  column_spec(2:5, width = "2.5cm")
+```
+
+**Commentaires** : Une augmentation d’une unité d’activité physique augmente le score de santé de `r round(coef(model1)[2], 3)` points, mais l’effet est biaisé par l’absence de contrôle des confondeurs.
+**Conséquence attendue**: L’effet de l’activité physique est probablement exagéré parce que ces variables oubliées sont liées à la fois à l’activité physique et au score de santé.
+
+## Modèle 2 : Contrôles Légitimes + effets fixes
+L'objectif est d'estimer l'effet causal en contrôlant les confondeurs légitimes et les effets fixes.
+
+```{r model2, results='asis'}
+model2 <- lm(ScoreSante ~ ActivitePhysique + Sexe + Tabagisme + Age + I(Age^2) + 
+             Education + RevenuFamilial + AccesSoins + Alimentation +
+             EtatSanteChronique + ConsommationAlcool + StressPsychologique + 
+             SoutienSocial + QualiteSommeil + OccupationPhysique + Region + Milieu, data = health_data)
+
+results <- tidy(model2, conf.int = TRUE) %>%
+  dplyr::filter(term != "(Intercept)") %>%
+  mutate(
+    term_clean = case_when(
+      term == "ActivitePhysique" ~ "Activité physique",
+      term == "SexeHomme" ~ "Sexe (Homme)",
+      term == "TabagismeFumeur" ~ "Tabagisme (Fumeur)",
+      term == "Age" ~ "Âge (années)",
+      term == "I(Age^2)" ~ "Âge²",
+      term == "EducationSecondaire" ~ "Éducation (Secondaire)",
+      term == "EducationSuperieur" ~ "Éducation (Supérieur)",
+      term == "RevenuFamilial" ~ "Revenu familial",
+      term == "AccesSoins" ~ "Accès aux soins",
+      term == "Alimentation" ~ "Qualité alimentation",
+      term == "EtatSanteChronique" ~ "État de santé chronique",
+      term == "ConsommationAlcool" ~ "Consommation d’alcool",
+      term == "StressPsychologique" ~ "Stress psychologique",
+      term == "SoutienSocial" ~ "Soutien social",
+      term == "QualiteSommeil" ~ "Qualité du sommeil",
+      term == "OccupationPhysique" ~ "Occupation physique",
+      term == "RegionregionB" ~ "Région B",
+      term == "RegionregionC" ~ "Région C",
+      term == "RegionregionD" ~ "Région D",
+      term == "RegionregionE" ~ "Région E",
+      term == "MilieuUrbain" ~ "Milieu urbain",
+      TRUE ~ term
+    ),
+    p_value_fmt = ifelse(p.value < 0.001, "<0.001", sprintf("%.3f", p.value))
+  ) %>%
+  dplyr::select(Variable = term_clean, Estimate = estimate, `IC 95% inf` = conf.low, 
+                `IC 95% sup` = conf.high, `p-value` = p_value_fmt)
+
+kable(results, caption = "Tableau 5: Résultats de la régression ajustée (modèle 2)",
+      digits = 3, booktabs = TRUE, align = "lrrrr", label = "tab:model2") %>%
+  kable_styling(latex_options = c("striped", "HOLD_position"))
+```
+**Commentaire** Estimation non biaisé du coéf de l'activité sportive
+
+
+## Modèle 3 : Surcontrôle (biaisé)
+Ce modèle inclut (MotivationSante) la motivation, une variable post-traitement, introduisant un biais de surcontrôle.
+
+
+```{r model3, results='asis'}
+model3 <- lm(ScoreSante ~ ActivitePhysique + Sexe + Tabagisme + Age + I(Age^2) + 
+             Education + RevenuFamilial + AccesSoins + Alimentation + MotivationSante +
+             EtatSanteChronique + ConsommationAlcool + StressPsychologique + 
+             SoutienSocial + QualiteSommeil + OccupationPhysique + Region + Milieu, 
+             data = health_data)
+
+results <- tidy(model3, conf.int = TRUE) %>%
+  filter(term != "(Intercept)") %>%
+  mutate(
+    term_clean = case_when(
+      term == "ActivitePhysique" ~ "Activité physique",
+      term == "SexeHomme" ~ "Sexe (Homme)",
+      term == "TabagismeFumeur" ~ "Tabagisme (Fumeur)",
+      term == "Age" ~ "Âge (années)",
+      term == "I(Age^2)" ~ "Âge²",
+      term == "EducationSecondaire" ~ "Éducation (Secondaire)",
+      term == "EducationSuperieur" ~ "Éducation (Supérieur)",
+      term == "RevenuFamilial" ~ "Revenu familial",
+      term == "AccesSoins" ~ "Accès aux soins",
+      term == "Alimentation" ~ "Qualité alimentation",
+      term == "MotivationSante" ~ "Motivation santé",
+      term == "EtatSanteChronique" ~ "État de santé chronique",
+      term == "ConsommationAlcool" ~ "Consommation d’alcool",
+      term == "StressPsychologique" ~ "Stress psychologique",
+      term == "SoutienSocial" ~ "Soutien social",
+      term == "QualiteSommeil" ~ "Qualité du sommeil",
+      term == "OccupationPhysique" ~ "Occupation physique",
+      term == "RegionregionB" ~ "Région B",
+      term == "RegionregionC" ~ "Région C",
+      term == "RegionregionD" ~ "Région D",
+      term == "RegionregionE" ~ "Région E",
+      term == "MilieuUrbain" ~ "Milieu urbain",
+      TRUE ~ term
+    ),
+    p_value_fmt = ifelse(p.value < 0.001, "<0.001", sprintf("%.3f", p.value))
+  ) %>%
+  dplyr::select(Variable = term_clean, Estimate = estimate, `IC 95% inf` = conf.low, 
+                `IC 95% sup` = conf.high, `p-value` = p_value_fmt)
+
+kable(results, caption = "Tableau 6: Résultats de la régression avec surcontrôle (modèle 3)",
+      digits = 3, booktabs = TRUE, align = "lrrrr", label = "tab:model3") %>%
+  kable_styling(latex_options = c("striped", "HOLD_position"))
+```
+
+**Commentaire** : Le coefficient de l’activité physique (`r round(coef(model3)[2], 3)`) est sous-estimé en raison du surcontrôle.
+
+\FloatBarrier
+
+## Modèle 4 : Contrôle du médiateur (biaisé)
+Ce modèle inclut l’IMC, un médiateur, ce qui biaise l’estimation de l’effet total.
+
+
+```{r model4, results='asis'}
+model4 <- lm(ScoreSante ~ ActivitePhysique + Sexe + Tabagisme + Age + I(Age^2) + 
+             IMC + I(IMC^2) + Education + RevenuFamilial + AccesSoins + Alimentation +
+             EtatSanteChronique + ConsommationAlcool + StressPsychologique + 
+             SoutienSocial + QualiteSommeil + OccupationPhysique + Region + Milieu, 
+             data = health_data)
+
+results <- tidy(model4, conf.int = TRUE) %>%
+  filter(term != "(Intercept)") %>%
+  mutate(
+    term_clean = case_when(
+      term == "ActivitePhysique" ~ "Activité physique",
+      term == "SexeHomme" ~ "Sexe (Homme)",
+      term == "TabagismeFumeur" ~ "Tabagisme (Fumeur)",
+      term == "Age" ~ "Âge (années)",
+      term == "I(Age^2)" ~ "Âge²",
+      term == "IMC" ~ "IMC",
+      term == "I(IMC^2)" ~ "IMC²",
+      term == "EducationSecondaire" ~ "Éducation (Secondaire)",
+      term == "EducationSuperieur" ~ "Éducation (Supérieur)",
+      term == "RevenuFamilial" ~ "Revenu familial",
+      term == "AccesSoins" ~ "Accès aux soins",
+      term == "Alimentation" ~ "Qualité alimentation",
+      term == "EtatSanteChronique" ~ "État de santé chronique",
+      term == "ConsommationAlcool" ~ "Consommation d’alcool",
+      term == "StressPsychologique" ~ "Stress psychologique",
+      term == "SoutienSocial" ~ "Soutien social",
+      term == "QualiteSommeil" ~ "Qualité du sommeil",
+      term == "OccupationPhysique" ~ "Occupation physique",
+      term == "RegionregionB" ~ "Région B",
+      term == "RegionregionC" ~ "Région C",
+      term == "RegionregionD" ~ "Région D",
+      term == "RegionregionE" ~ "Région E",
+      term == "MilieuUrbain" ~ "Milieu urbain",
+      TRUE ~ term
+    ),
+    p_value_fmt = ifelse(p.value < 0.001, "<0.001", sprintf("%.3f", p.value))
+  ) %>%
+  dplyr::select(Variable = term_clean, Estimate = estimate, `IC 95% inf` = conf.low, 
+                `IC 95% sup` = conf.high, `p-value` = p_value_fmt)
+
+kable(results, caption = "Tableau 7: Résultats de la régression avec médiateur (modèle 4)",
+      digits = 3, booktabs = TRUE, align = "lrrrr", label = "tab:model4") %>%
+  kable_styling(latex_options = c("striped", "HOLD_position"))
+```
+
+**Commentaire** : Le coefficient de l’activité physique (`r round(coef(model4)[2], 3)`) sous-estime l’effet total en raison du contrôle de l’IMC.
+
+## Modèle 5 : Contrôles légitimes avec interactions + effets fixes
+
+```{r model5, results='asis'}
+model5 <- lm(ScoreSante ~ ActivitePhysique + Sexe + Tabagisme + Age + I(Age^2) + 
+             Education + RevenuFamilial + AccesSoins + Alimentation +
+             EtatSanteChronique + ConsommationAlcool + StressPsychologique + 
+             SoutienSocial + QualiteSommeil + OccupationPhysique + Region + Milieu +
+             ActivitePhysique:Sexe + ActivitePhysique:I(Age - mean(Age)) +
+             Tabagisme:I(Age - mean(Age)), data = health_data)
+
+results <- tidy(model5, conf.int = TRUE) %>%
+  filter(term != "(Intercept)") %>%
+  mutate(
+    term_clean = case_when(
+      term == "ActivitePhysique" ~ "Activité physique",
+      term == "SexeHomme" ~ "Sexe (Homme)",
+      term == "TabagismeFumeur" ~ "Tabagisme (Fumeur)",
+      term == "Age" ~ "Âge (années)",
+      term == "I(Age^2)" ~ "Âge²",
+      term == "EducationSecondaire" ~ "Éducation (Secondaire)",
+      term == "EducationSuperieur" ~ "Éducation (Supérieur)",
+      term == "RevenuFamilial" ~ "Revenu familial",
+      term == "AccesSoins" ~ "Accès aux soins",
+      term == "Alimentation" ~ "Qualité alimentation",
+      term == "EtatSanteChronique" ~ "État de santé chronique",
+      term == "ConsommationAlcool" ~ "Consommation d’alcool",
+      term == "StressPsychologique" ~ "Stress psychologique",
+      term == "SoutienSocial" ~ "Soutien social",
+      term == "QualiteSommeil" ~ "Qualité du sommeil",
+      term == "OccupationPhysique" ~ "Occupation physique",
+      term == "RegionregionB" ~ "Région B",
+      term == "RegionregionC" ~ "Région C",
+      term == "RegionregionD" ~ "Région D",
+      term == "RegionregionE" ~ "Région E",
+      term == "MilieuUrbain" ~ "Milieu urbain",
+      term == "ActivitePhysique:SexeHomme" ~ "Interaction : Activité physique × Sexe (H)",
+      term == "ActivitePhysique:I(Age - mean(Age))" ~ "Interaction : Activité physique × Âge centré",
+      term == "TabagismeFumeur:I(Age - mean(Age))" ~ "Interaction : Tabagisme × Âge centré",
+      TRUE ~ term
+    ),
+    p_value_fmt = ifelse(p.value < 0.001, "<0.001", sprintf("%.3f", p.value))
+  ) %>%
+  dplyr::select(Variable = term_clean, Estimate = estimate, `IC 95% inf` = conf.low, 
+                `IC 95% sup` = conf.high, `p-value` = p_value_fmt)
+
+kable(results, caption = "Tableau 8 :Résultats de la régression avec interactions (modèle 5)",
+      digits = 3, booktabs = TRUE, align = "lrrrr", label = "tab:model5") %>%
+  kable_styling(latex_options = c("striped", "HOLD_position"))
+```
+
+**Commentaires** : Le coefficient de l’activité physique (`r round(coef(model5)[2], 3)`) estimé est non biaisé et est le  vrai effet.
+
+
+## Comparaison des modèles : résumé des 05 modèles
+
+```{r model-comparison, results='asis'}
+extract_coef <- function(model) {
+  coef_summary <- summary(model)$coefficients["ActivitePhysique", ]
+  p_val <- coef_summary[4]
+  c(Estimate = round(coef_summary[1], 3), SE = round(coef_summary[2], 3),
+    t_value = round(coef_summary[3], 3), p_value = ifelse(p_val < 0.001, "<0.001", sprintf("%.3f", p_val)))
+}
+
+results_comparaison <- as.data.frame(rbind(
+  "Naïf (biaisé)" = extract_coef(model1),
+  "Contrôles légitimes" = extract_coef(model2),
+  "Surcontrôle (biaisé)" = extract_coef(model3),
+  "Médiation (biaisé)" = extract_coef(model4),
+  "Contrôles + interactions" = extract_coef(model5)
+)) %>%
+  mutate(R2_adj = c(round(summary(model1)$adj.r.squared, 3),
+                    round(summary(model2)$adj.r.squared, 3),
+                    round(summary(model3)$adj.r.squared, 3),
+                    round(summary(model4)$adj.r.squared, 3),
+                    round(summary(model5)$adj.r.squared, 3)))
+colnames(results_comparaison) <- c("Estimate", "SE", "t value", "P_value", "R2_adj")
+
+kable(results_comparaison, caption = "Tableau 9: Comparaison des coefficients de l’activité physique",
+      digits = 3, booktabs = TRUE, label = "tab:comp") %>%
+  kable_styling(latex_options = c("striped", "HOLD_position"))
+```
+
+```{r stargazer-comparison, results='asis'}
+add_lines_df <- tibble(
+  term = c("Confondeurs", "Surcontrôle", "Médiateur", "Interactions"),
+  "Naïf" = c("Non", "Non", "Non", "Non"),
+  "Contrôles" = c("Oui", "Non", "Non", "Non"),
+  "Surcontrôle" = c("Oui", "Oui", "Non", "Non"),
+  "Médiation" = c("Oui", "Non", "Oui", "Non"),
+  "Contrôles + interaction" = c("Oui", "Non", "Non", "Oui")
+)
+
+models_named <- list("Naïf" = model1, "Contrôles" = model2, "Surcontrôle" = model3,
+                    "Médiation" = model4, "Contrôles + interaction" = model5)
+
+coef_map <- c("ActivitePhysique" = "Activité Physique")
+
+modelsummary(
+  models_named, output = "kableExtra", coef_map = coef_map,
+  title = "Tableau 10 : Effet de l’activité physique sur le score de santé",
+  stars = TRUE, gof_omit = ".*", notes = list("Effet vrai simulé = 3.974 | 3.780"),
+  add_rows = add_lines_df, label = "tab:summary"
+) %>%
+  kable_styling(latex_options = c("striped", "HOLD_position", "repeat_header")) %>%
+  add_header_above(c(" " = 1, "Score de Santé" = 5))
+```
+
+## visualisation des coéf des 05 modèles et leurs IC (95%)
+
+```{r results-visualization, fig.cap="Figure 8: Comparaison des estimations de l’effet causal"}
+results_comparaison <- as.data.frame(rbind(
+  "Naïf (biaisé)" = extract_coef(model1),
+  "Contrôles légitimes" = extract_coef(model2),
+  "Surcontrôle (biaisé)" = extract_coef(model3),
+  "Médiation (biaisé)" = extract_coef(model4),
+  "Complet + interactions" = extract_coef(model5)
+), stringsAsFactors = FALSE)
+
+results_comparaison$Estimate <- as.numeric(results_comparaison$Estimate)
+results_comparaison$SE <- as.numeric(results_comparaison$SE)
+results_comparaison$t_value <- as.numeric(results_comparaison$t_value)
+
+viz_data <- data.frame(
+  Modele = c("Naïf", "Contrôles\nlégitimes", "Surcontrôle", "Médiation", "Contrôles\nlégitimes\n+ interactions"),
+  Estimate = results_comparaison$Estimate,
+  SE = results_comparaison$SE,
+  Type = c("Biaisé", "Correct", "Biaisé", "Biaisé", "Correct"),
+  Biais = c("Surestimation", "Non biaisé", "Sous-estimation", "Sous-estimation", "Non biaisé")
+)
+
+viz_data$Modele <- factor(viz_data$Modele, levels = rev(viz_data$Modele))
+
+ggplot(viz_data, aes(x = Estimate, y = Modele, color = Type)) +
+  geom_vline(xintercept = 2.5, linetype = "dashed", color = "black", size = 1.2) +
+  geom_point(size = 5) +
+  geom_errorbarh(aes(xmin = Estimate - 1.96 * SE, xmax = Estimate + 1.96 * SE), 
+                 height = 0.3, size = 1.2) +
+  geom_text(aes(label = paste0("β = ", round(Estimate, 2))), 
+            vjust = -0.8, hjust = 0.5, size = 4, fontface = "bold") +
+  scale_color_manual(values = c("Biaisé" = "#E74C3C", "Correct" = "#27AE60")) +
+  labs(
+    title = "Comparaison des Estimations de l'Effet Causal",
+    subtitle = "Impact de l'activité physique sur le score de santé",
+    x = "Coefficient estimé (avec IC 95%)",
+    y = "Modèle de régression",
+    color = "Statut du modèle"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", size = 16, hjust = 0.5),
+    plot.subtitle = element_text(size = 12, hjust = 0.5, color = "gray40"),
+    axis.text.y = element_text(size = 12, face = "bold"),
+    axis.text.x = element_text(size = 11),
+    axis.title = element_text(face = "bold", size = 12),
+    legend.position = "bottom",
+    legend.text = element_text(size = 11, face = "bold")
+  ) +
+  xlim(1.5, 6)
+```
+
+**Commentaire** : Les modèles 2 et 5 sont non biaisés, contrairement aux modèles biaisés (1, 3, 4).
+
+\FloatBarrier
+
+# Sensibilité à la spécification fonctionnelle
+
+```{r robustness-tests, results='asis'}
+extract_coef <- function(model, var_name) {
+  coefs <- summary(model)$coefficients
+  if (!(var_name %in% rownames(coefs))) stop(paste("La variable", var_name, "n'est pas dans le modèle."))
+  coef_summary <- coefs[var_name, ]
+  p_val_fmt <- if (coef_summary[4] < 0.001) "<0.001" else sprintf("%.3f", coef_summary[4])
+  c(Estimate = round(coef_summary[1], 3), SE = round(coef_summary[2], 3),
+    t_value = round(coef_summary[3], 3), p_value = p_val_fmt)
+}
+
+formula_confounders <- ScoreSante ~ Sexe + Tabagisme + Age + I(Age^2) + Education +
+                       RevenuFamilial + AccesSoins + Alimentation + EtatSanteChronique +
+                       ConsommationAlcool + StressPsychologique + SoutienSocial +
+                       QualiteSommeil + OccupationPhysique + Region + Milieu 
+
+model_main <- lm(update(formula_confounders, . ~ . + ActivitePhysique), data = health_data)
+model_log <- lm(update(formula_confounders, . ~ . + log(ActivitePhysique + 1)), data = health_data)
+model_quad <- lm(update(formula_confounders, . ~ . + ActivitePhysique + I(ActivitePhysique^2)), data = health_data)
+
+robustness_results <- as.data.frame(rbind(
+  "Modèle principal (linéaire)" = extract_coef(model_main, "ActivitePhysique"),
+  "Spécification logarithmique" = extract_coef(model_log, "log(ActivitePhysique + 1)"),
+  "Forme quadratique" = extract_coef(model_quad, "ActivitePhysique")
+)) %>%
+  mutate(R2_adj = c(round(summary(model_main)$adj.r.squared, 3),
+                    round(summary(model_log)$adj.r.squared, 3),
+                    round(summary(model_quad)$adj.r.squared, 3)))
+
+kable(robustness_results, caption = "Tableau 11: Tests de robustesse de l’effet de l’activité physique",
+      digits = 3, booktabs = TRUE, align = "c", label = "tab:robust") %>%
+  kable_styling(latex_options = c("striped", "HOLD_position"))
+```
+
+**Commentaires** : 
+- Tous les modèles confirment un effet positif significatif.
+- Les modèles non linéaires (logarithmique, quadratique) suggèrent un effet décroissant à hauts niveaux d’activité physique.
+
+## Visualisation des effets marginaux des 03 spécifications
+
+```{r viz-effects, fig.cap="Figure 9: Effets marginaux de l’activité physique"}
+coef_main <- coef(model_main)["ActivitePhysique"]
+coef_log <- coef(model_log)["log(ActivitePhysique + 1)"]
+coef_quad_lin <- coef(model_quad)["ActivitePhysique"]
+coef_quad_sq <- coef(model_quad)["I(ActivitePhysique^2)"]
+
+valeurs_activite <- quantile(health_data$ActivitePhysique, probs = c(0.1, 0.5, 0.9))
+
+effet_main <- function(x) coef_main
+effet_log <- function(x) coef_log / (x + 1)
+effet_quad <- function(x) coef_quad_lin + 2 * coef_quad_sq * x
+
+effets <- data.frame(
+  ActivitePhysique = valeurs_activite,
+  Linéaire = sapply(valeurs_activite, effet_main),
+  Logarithmique = sapply(valeurs_activite, effet_log),
+  Quadratique = sapply(valeurs_activite, effet_quad)
+)
+
+effets_long <- pivot_longer(effets, cols = -ActivitePhysique, names_to = "Modèle", values_to = "EffetMarginal")
+
+ggplot(effets_long, aes(x = ActivitePhysique, y = EffetMarginal, color = Modèle)) +
+  geom_line(size = 1.2) +
+  geom_point(size = 3) +
+  labs(title = "Effets marginaux de l’activité physique selon la spécification du modèle",
+       x = "Activité physique (unités)", y = "Effet marginal estimé", color = "Modèle") +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold", size = 14, hjust = 0.5),
+        axis.title = element_text(face = "bold", size = 12), legend.position = "bottom")
+```
+
+**Commentaires** : Les modèles logarithmique et quadratique montrent une décroissance de l’effet marginal.
+
+\FloatBarrier
+
+# Analyse de médiation : Rôle de l’IMC
+
+L'analyse de médiation permet de distinguer l’effet direct et indirect (via l’IMC) de l’activité physique sur le score de santé.
+
+```{r mediation, results='asis'}
+model_m <- lm(IMC ~ ActivitePhysique + Sexe + Tabagisme + Age + I(Age^2) + Education +
+              RevenuFamilial + AccesSoins + Alimentation + EtatSanteChronique +
+              ConsommationAlcool + StressPsychologique + SoutienSocial +
+              QualiteSommeil + OccupationPhysique + Region + Milieu, data = health_data)
+
+model_y <- lm(ScoreSante ~ ActivitePhysique + IMC + Sexe + Tabagisme + Age + I(Age^2) +
+              Education + RevenuFamilial + AccesSoins + Alimentation + EtatSanteChronique +
+              ConsommationAlcool + StressPsychologique + SoutienSocial +
+              QualiteSommeil + OccupationPhysique + Region + Milieu, data = health_data)
+
+set.seed(123)
+mediation_result <- mediate(model.m = model_m, model.y = model_y, treat = "ActivitePhysique",
+                           mediator = "IMC", boot = TRUE, sims = 1000)
+
+safe_ci <- function(ci_object) if (is.null(ci_object) || length(ci_object) != 2 || any(is.na(ci_object))) c(NA, NA) else ci_object
+safe_est <- function(x) if (is.null(x) || is.na(x)) NA else round(x, 3)
+safe_pval <- function(pval) if (is.null(pval) || is.na(pval)) NA else if (pval < 0.001) "<0.001" else sprintf("%.3f", pval)
+
+total_est <- ifelse(is.null(mediation_result$total.effect) || is.na(mediation_result$total.effect),
+                    mediation_result$z0 + mediation_result$d0, mediation_result$total.effect)
+
+total_ci <- if (is.null(mediation_result$total.ci) || length(mediation_result$total.ci) != 2) {
+  c(mediation_result$z0.ci[1] + mediation_result$d0.ci[1], mediation_result$z0.ci[2] + mediation_result$d0.ci[2])
+} else mediation_result$total.ci
+
+mediation_table <- data.frame(
+  Effet = c("Effet total", "Effet direct (ADE)", "Effet indirect (ACME)", "Proportion médiée"),
+  Estimé = round(c(total_est, mediation_result$z0, mediation_result$d0, mediation_result$n0), 3),
+  `IC 95% (Bas)` = round(c(total_ci[1], mediation_result$z0.ci[1], mediation_result$d0.ci[1], mediation_result$n0.ci[1]), 3),
+  `IC 95% (Haut)` = round(c(total_ci[2], mediation_result$z0.ci[2], mediation_result$d0.ci[2], mediation_result$n0.ci[2]), 3),
+  `p-value` = c(NA, safe_pval(mediation_result$z0.p), safe_pval(mediation_result$d0.p), NA)
+)
+
+kable(mediation_table, caption = "Tableau 12: Effets de médiation de l’IMC",
+      align = "c", booktabs = TRUE, label = "tab:mediation") %>%
+  kable_styling(latex_options = c("striped", "HOLD_position"))
+```
+
+**Commentaire** : 
+- L’effet indirect via l’IMC représente une part significative de l’effet total, confirmant son rôle de médiateur.
+
+\FloatBarrier
+
+# Extension par apprentissage statistique
+
+Les régressions linéaires supposent une forme fonctionnelle. Des méthodes non paramétriques comme les **forêts causales** ou le **double machine learning (DML)** permettent d’estimer les effets sans imposer de contraintes strictes.
+
+# Limites et implications
+
+## Limites du design
+- Les données simulées sont transversales, limitant l’analyse des effets temporels.
+- Les biais de simultanéité ou de sélection inversée peuvent persister dans des données réelles.
+
+## Implications pratiques
+- Définir clairement les mécanismes causaux.
+- Mesurer les confondeurs.
+- Utiliser des méthodes robustes.
+- Valider avec des approches alternatives (ex. variables instrumentales si biais sur les inobservables).
+
+> **Message clé** : Contrôler uniquement les confondeurs légitimes pour éviter les biais.
+
+# Références
+
+- Angrist, J. D., & Pischke, J. S. (2008). *Mostly Harmless Econometrics*.  
+  [Lien](https://www.dsecoaching.com/pdf/2008%20Angrist%20Pischke%20MostlyHarmlessEconometrics.pdf)
+- Hernán, M. A., & Robins, J. M. (2020). *Causal Inference: What If*.  
+  [Lien](https://miguelhernan.org/whatifbook)
+- Pearl, J. (2009). *Causality: Models, Reasoning, and Inference*.  
+  [Lien](https://projects.illc.uva.nl/cil/uploaded_files/inlineitem/Pearl_2009_Causality.pdf)
+- Cunningham, S. (2021). *Causal Inference: The Mixtape*.  
+  [Lien](https://mixtape.scunning.com/)
+
+- **Mon Github:**
+  [Lien](github.com/Faskos92)
+
